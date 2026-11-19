@@ -1,0 +1,35 @@
+name: CI
+
+# Keep the workflow named "CI" and the job named "test": the merge workflow and the
+# required status check on main both depend on those names.
+
+on:
+  pull_request:
+  push:
+    branches: [main, "milestone/**"]
+  # The merge workflow starts this on the milestone branch after each merge,
+  # so the combined code of all merged pull requests is tested.
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # TODO: replace the placeholder BEFORE the first threads start (SETUP.md, section 7, step 3).
+      # 1. Install, lint and test, using the same commands as CLAUDE.md.
+      # 2. Start the app for real and check it answers. Tests use fakes, so a setup that was
+      #    never started can pass every test and still crash on first run. For example:
+      #
+      #      - name: Start the app
+      #        run: docker compose up -d --build --wait
+      #      - name: Check it answers
+      #        run: curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://localhost:8000/health
+      #      - name: Logs and stop
+      #        if: always()
+      #        run: docker compose logs && docker compose down -v
+      #
+      # Until then this job passes (with a warning) so the workflow can be tested end to end.
+      - name: Placeholder
+        run: echo "::warning::CI is still the placeholder and tests nothing. Replace it before the first threads start."

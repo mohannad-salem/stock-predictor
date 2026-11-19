@@ -1,0 +1,73 @@
+name: Authorship
+
+# Keeps Claude (or anyone else) from being credited on main.
+# On every pull request into main, and on every push to main, this fails if any commit:
+#   - is authored by anyone other than the repo owner's GitHub account, or
+#   - has a Co-authored-by line, or a "Generated with Claude" line.
+#
+# Add the "authorship" check to the protect-main ruleset (Require status checks), so a pull
+# request that fails it cannot be merged. The push check can't undo a merge, but it alerts you
+# at once (GitHub emails you about failed runs).
+#
+# Your final squash merge into main writes a new commit message at merge time, so this check
+# can't see it in advance: read the message box before you confirm and delete any
+# Co-authored-by line. The push check catches it if one slips through.
+#
+# If the repo belongs to an organization, replace github.repository_owner below with your
+# GitHub username. This only reads commit data through the GitHub API; it never runs code.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  authorship:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      OWNER: ${{ github.repository_owner }}
+      EVENT: ${{ github.event_name }}
+      PR: ${{ github.event.pull_request.number }}
+      BEFORE: ${{ github.event.before }}
+      AFTER: ${{ github.event.after }}
+      CHECK: |
+        def check:
+          .sha[0:7] as $s
+          | (if ((.author.login // "") | ascii_downcase) != ($ENV.OWNER | ascii_downcase)
+             then "\($s): author is \(.commit.author.name) <\(.commit.author.email)>, GitHub account \(.author.login // "none"), expected \($ENV.OWNER)"
+             else empty end),
+            (.commit.message | split("\n")[] | select(test("^\\s*co-authored-by:"; "i")) | "\($s): has a co-author line: \(.)"),
+            (if (.commit.message | test("generated with \\[?claude"; "i")) then "\($s): has a Generated with Claude line" else empty end);
+    steps:
+      - name: Check every commit is yours, with no co-author lines
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            url="repos/$REPO/pulls/$PR/commits?per_page=100"
+            problems=$(gh api --paginate "$url" --jq "$CHECK .[] | check")
+            count=$(gh api --paginate "$url" --jq '.[].sha' | wc -l)
+            what="pull request #$PR"
+          elif [[ "$BEFORE" =~ ^0+$ ]]; then
+            problems=$(gh api "repos/$REPO/commits/$AFTER" --jq "$CHECK check")
+            count=1
+            what="the first push to main"
+          else
+            url="repos/$REPO/compare/$BEFORE...$AFTER"
+            problems=$(gh api "$url" --jq "$CHECK .commits[] | check")
+            count=$(gh api "$url" --jq '.commits | length')
+            what="the push to main"
+          fi
+
+          if [ -n "$problems" ]; then
+            echo "::error::Authorship problems in $what. Nothing should credit anyone but $OWNER:"
+            while IFS= read -r line; do echo "::error::$line"; done <<<"$problems"
+            exit 1
+          fi
+          echo "Checked $count commit(s) in $what: all authored by $OWNER, no co-author lines."

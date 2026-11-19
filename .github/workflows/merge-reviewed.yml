@@ -1,0 +1,143 @@
+name: Merge reviewed PRs
+
+# Squash merges a pull request into its milestone branch once BOTH are true:
+#   - it is labelled reviewer-approved (and not changes-requested or needs-decision)
+#   - CI passed on the exact commit that is the pull request's head right now
+# Whichever happens last (the label, or CI finishing) triggers the merge, so nothing waits in a loop.
+#
+# Other rules:
+#   - Pushing new commits to a pull request removes reviewer-approved, so code the reviewer
+#     has not seen is never merged. The re-review routine adds the label again.
+#   - The merge only goes through if the head commit is still the one that was checked
+#     (--match-head-commit), so a push during the merge cannot slip in.
+#   - After each merge, CI is started on the milestone branch, so the combined code is tested
+#     (merges made by this workflow do not start other workflows on their own).
+#   - Pull requests into main are never touched. Pull requests that change .github/ are refused;
+#     Mohannad merges those himself.
+#
+# Security: pull_request_target runs the copy of this file on the pull request's BASE branch, and
+# workflow_run runs the copy on main, so a pull request cannot rewrite these rules for itself.
+# This workflow never checks out or runs the pull request's code.
+#
+# Contract: the CI workflow stays named "CI" and its job stays named "test".
+
+on:
+  pull_request_target:
+    types: [labeled, synchronize]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: read
+  actions: write
+
+jobs:
+  dismiss-stale-approval:
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      github.event.action == 'synchronize' &&
+      startsWith(github.event.pull_request.base.ref, 'milestone/') &&
+      contains(github.event.pull_request.labels.*.name, 'reviewer-approved')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Remove reviewer-approved after new commits
+        run: |
+          gh api -X DELETE "repos/$REPO/issues/$PR/labels/reviewer-approved" > /dev/null
+          echo "New commits were pushed after approval, so reviewer-approved was removed. The re-review routine will label it again."
+
+  auto-merge:
+    if: >-
+      (github.event_name == 'pull_request_target' &&
+       github.event.action == 'labeled' &&
+       github.event.label.name == 'reviewer-approved' &&
+       startsWith(github.event.pull_request.base.ref, 'milestone/')) ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: auto-merge-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      EVENT: ${{ github.event_name }}
+      LABEL_PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
+      RUN_PRS: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+    steps:
+      - name: Merge if approved, CI passed, and nothing changed since
+        run: |
+          set -euo pipefail
+
+          merge_one() {
+            local pr=$1 info state draft base head labels files checks failed pending test_ok title
+            info=$(gh pr view "$pr" --repo "$REPO" --json state,isDraft,baseRefName,headRefOid,labels,title)
+            state=$(jq -r .state <<<"$info")
+            draft=$(jq -r .isDraft <<<"$info")
+            base=$(jq -r .baseRefName <<<"$info")
+            head=$(jq -r .headRefOid <<<"$info")
+            labels=$(jq -r '.labels[].name' <<<"$info")
+            title=$(jq -r .title <<<"$info")
+
+            if [ "$state" != "OPEN" ]; then echo "#$pr is $state. Nothing to do."; return 0; fi
+            case "$base" in
+              milestone/*) ;;
+              *) echo "#$pr targets $base, not a milestone branch. Not merging."; return 0 ;;
+            esac
+            if [ "$draft" = "true" ]; then echo "#$pr is a draft. Not merging."; return 0; fi
+            if ! grep -qx 'reviewer-approved' <<<"$labels"; then
+              echo "#$pr is not labelled reviewer-approved. Waiting for the reviewer."; return 0
+            fi
+            if grep -qxE 'changes-requested|needs-decision' <<<"$labels"; then
+              echo "::error::#$pr has reviewer-approved and also changes-requested or needs-decision. Not merging; fix the labels by hand."
+              return 1
+            fi
+            if [ "$head" != "$SHA" ]; then
+              echo "#$pr has new commits since this event ($SHA, now $head). Not merging; they need review first."
+              return 0
+            fi
+
+            files=$(gh api --paginate "repos/$REPO/pulls/$pr/files?per_page=100" --jq '.[].filename')
+            if grep -q '^\.github/' <<<"$files"; then
+              echo "::error::#$pr changes files under .github/. Mohannad must review and merge it himself."
+              return 1
+            fi
+
+            # Latest run of each check on this exact commit, ignoring this workflow's own jobs.
+            checks=$(gh api --paginate "repos/$REPO/commits/$head/check-runs?per_page=100" \
+              --jq '.check_runs[] | select(.name != "auto-merge" and .name != "dismiss-stale-approval") | [.name, .status, (.conclusion // "")] | @tsv')
+            failed=$(awk -F'\t' '$2 == "completed" && $3 != "success" && $3 != "neutral" && $3 != "skipped"' <<<"$checks")
+            pending=$(awk -F'\t' '$2 != "completed"' <<<"$checks")
+            test_ok=$(awk -F'\t' '$1 == "test" && $3 == "success"' <<<"$checks")
+            if [ -n "$failed" ]; then
+              echo "::warning::A check failed on $head, so #$pr is not merged:"; echo "$failed"; return 0
+            fi
+            if [ -n "$pending" ] || [ -z "$test_ok" ]; then
+              echo "CI has not finished on $head yet. This runs again when CI completes."; return 0
+            fi
+
+            # Explicit subject and empty body keep the squash commit free of
+            # any Co-authored-by or "Generated with" lines from the branch.
+            gh pr merge "$pr" --repo "$REPO" --squash --delete-branch \
+              --match-head-commit "$head" --subject "$title (#$pr)" --body ""
+            echo "Merged #$pr into $base. Starting CI on $base to test the combined code."
+            gh workflow run ci.yml --repo "$REPO" --ref "$base"
+          }
+
+          if [ "$EVENT" = "pull_request_target" ]; then
+            prs="$LABEL_PR"
+          else
+            prs=$(jq -r '.[]?.number' <<<"$RUN_PRS")
+          fi
+          if [ -z "$prs" ]; then
+            echo "No pull request belongs to this CI run (for example a run on a milestone branch). Nothing to merge."
+            exit 0
+          fi
+          for pr in $prs; do merge_one "$pr"; done
