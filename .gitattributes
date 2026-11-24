@@ -1,0 +1,3 @@
+# Same line endings everywhere: Windows, Mac and the Linux cloud threads.
+# Without this, files edited on Windows and in the cloud flip between CRLF and LF.
+* text=auto eol=lf

@@ -6,6 +6,12 @@
 # Personal Claude settings
 .claude/settings.local.json
 
+# Handoff pack files (they hold personal details; keep them out of the repo)
+/CONSULTANT-AI-HANDOFF.md
+/NEW-PROJECT-HANDOFF.md
+/WORKFLOW-GUIDE.md
+/*-STATE.md
+
 # OS and editor
 .DS_Store
 Thumbs.db

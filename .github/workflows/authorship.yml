@@ -43,8 +43,8 @@ jobs:
           | (if ((.author.login // "") | ascii_downcase) != ($ENV.OWNER | ascii_downcase)
              then "\($s): author is \(.commit.author.name) <\(.commit.author.email)>, GitHub account \(.author.login // "none"), expected \($ENV.OWNER)"
              else empty end),
-            (.commit.message | split("\n")[] | select(test("^\\s*co-authored-by:"; "i")) | "\($s): has a co-author line: \(.)"),
-            (if (.commit.message | test("generated with \\[?claude"; "i")) then "\($s): has a Generated with Claude line" else empty end);
+            (.commit.message | split("\n")[] | select(test("^[[:space:]]*co-authored-by:"; "i")) | "\($s): has a co-author line: \(.)"),
+            (if (.commit.message | test("generated with .?claude"; "i")) then "\($s): has a Generated with Claude line" else empty end);
     steps:
       - name: Check every commit is yours, with no co-author lines
         run: |

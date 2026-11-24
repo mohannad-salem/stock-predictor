@@ -10,6 +10,9 @@ name: Merge reviewed PRs
 #     has not seen is never merged. The re-review routine adds the label again.
 #   - The merge only goes through if the head commit is still the one that was checked
 #     (--match-head-commit), so a push during the merge cannot slip in.
+#   - If any review of the head commit asked for changes or a decision (its comment starts with
+#     "Reviewer: changes-requested at <sha>" or "Reviewer: needs-decision at <sha>"), a later
+#     approval of that same commit does not count. Two reviews can race; the cautious one wins.
 #   - After each merge, CI is started on the milestone branch, so the combined code is tested
 #     (merges made by this workflow do not start other workflows on their own).
 #   - Pull requests into main are never touched. Pull requests that change .github/ are refused;
@@ -78,7 +81,7 @@ jobs:
 
           merge_one() {
             local pr=$1 info state draft base head labels files checks failed pending test_ok title
-            info=$(gh pr view "$pr" --repo "$REPO" --json state,isDraft,baseRefName,headRefOid,labels,title)
+            info=$(gh pr view "$pr" --repo "$REPO" --json state,isDraft,baseRefName,headRefOid,labels,title,comments)
             state=$(jq -r .state <<<"$info")
             draft=$(jq -r .isDraft <<<"$info")
             base=$(jq -r .baseRefName <<<"$info")
@@ -102,6 +105,16 @@ jobs:
             if [ "$head" != "$SHA" ]; then
               echo "#$pr has new commits since this event ($SHA, now $head). Not merging; they need review first."
               return 0
+            fi
+
+            # Two reviews of the same commit can run at once and disagree. A review that asked
+            # for changes or a decision on this exact commit wins: only a new commit can be approved.
+            blocked=$(SHA7="${head:0:7}" jq -r '.comments[].body | split("\n")[0] | select(test("^reviewer: *(changes-requested|needs-decision) at "; "i")) | select(contains($ENV.SHA7))' <<<"$info")
+            if [ -n "$blocked" ]; then
+              echo "::error::#$pr: a review of this same commit (${head:0:7}) asked for changes or a decision:"
+              echo "$blocked"
+              echo "Only a new commit can be approved. Not merging; the thread needs to push its fixes."
+              return 1
             fi
 
             files=$(gh api --paginate "repos/$REPO/pulls/$pr/files?per_page=100" --jq '.[].filename')

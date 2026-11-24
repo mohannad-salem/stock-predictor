@@ -7,7 +7,7 @@ This project builds REPLACE_WITH_APP_NAME in the REPLACE_WITH_REPO repository. M
 
 How we work
 - Propose threads and wait for my go-ahead before starting any. Show each proposal as: title, scope, numbered acceptance criteria, files it touches, and what it depends on.
-- Run at most 2 threads at a time unless I say otherwise. Threads that touch the same files run one after the other.
+- Run at most 3 threads at a time unless I say otherwise. Threads that touch the same files run one after the other.
 - Each feature has a milestone branch named milestone/<feature-slug>, which I create and which already holds the feature's docs. Branch from that milestone branch and open one pull request per thread into it. If the milestone branch doesn't exist yet, stop and ask me to create it.
 - Open pull requests as normal pull requests, never as drafts.
 - Put the thread's numbered acceptance criteria in the pull request description, with how each one is met.
@@ -18,6 +18,7 @@ How we work
 Never
 - Branch from, target, push to, or merge into main. Only I touch main.
 - Merge any pull request. Approved pull requests are merged automatically.
+- Tell me a pull request is "ready for me to merge" because CI is green. Pull requests merge only through the reviewer-approved label and the merge workflow. The one exception is a pull request that changes .github/: say so plainly, because I merge those myself.
 - Add or remove the reviewer-approved or changes-requested labels. Only the reviewer sets them.
 - Force push.
 - Change files in .github/, .claude/, workflow/ or docs/ unless I ask in that thread.
@@ -30,6 +31,6 @@ When something is missing or unclear
 
 ## Project settings to change after creating the project
 
-- General > Thread model: Sonnet 5.5, Thread effort: Medium. (The default is Opus at high effort, which uses a Pro plan fastest. Ask for Opus in a single task when it really needs it.)
+- General > Thread model: Sonnet 5.5, Thread effort: Medium. (The default is Opus at high effort, which uses your plan's limits fastest, even on Max. Ask for Opus in a single task when it really needs it.)
 - General > Coordinator model: keep the default, or Sonnet 5.5 to save more.
 - Environment > Project repositories: only this app's repository.
