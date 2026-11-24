@@ -15,4 +15,4 @@ Out of scope:
 - ...
 ```
 
-Then commit it to a new milestone branch and ask the project to plan it (workflow/README.md, steps 2 and 3).
+Then run `/new-milestone <slug>` in an ordinary `claude` session and ask the project to plan it (workflow/README.md, steps 2 and 3).

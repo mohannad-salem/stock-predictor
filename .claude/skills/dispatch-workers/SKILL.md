@@ -1,6 +1,6 @@
 ---
 name: dispatch-workers
-description: Manager step 2. Starts one cloud worker per approved, ready GitHub issue using claude --remote, at most 2 at a time. Run only when Mohannad asks.
+description: Manager step 2. Starts one cloud worker per approved, ready GitHub issue using claude --remote, at most 3 at a time. Run only when Mohannad asks.
 disable-model-invocation: true
 ---
 
@@ -9,7 +9,7 @@ You are the manager. Mohannad has approved the plan. Start cloud workers for the
 ## Steps
 
 1. Find the milestone Mohannad names (or the most recent one) and list its open issues labelled `ready` with `gh issue list --milestone "<slug>" --label ready`.
-2. Skip issues whose dependencies are still open. Start at most the number of workers Mohannad asks for; default 2.
+2. Skip issues whose dependencies are still open. Start at most the number of workers Mohannad asks for; default 3.
 3. For each issue you start, run this from the repo root (one command per issue):
 
    ```

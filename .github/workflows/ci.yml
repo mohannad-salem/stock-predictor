@@ -2,6 +2,11 @@ name: CI
 
 # Keep the workflow named "CI" and the job named "test": the merge workflow and the
 # required status check on main both depend on those names.
+#
+# If you add a deploy job: merges made by the merge workflow don't start `push` runs, so a job
+# gated on github.event_name == 'push' never runs for them. After each merge the merge workflow
+# starts this workflow with workflow_dispatch instead; include that event in the deploy job's
+# if: when every merge should deploy (for example to staging).
 
 on:
   pull_request:
@@ -18,8 +23,11 @@ jobs:
       - uses: actions/checkout@v4
 
       # TODO: replace the placeholder BEFORE the first threads start (SETUP.md, section 7, step 3).
-      # 1. Install, lint and test, using the same commands as CLAUDE.md.
-      # 2. Start the app for real and check it answers. Tests use fakes, so a setup that was
+      # 1. Install, lint, type check (if the language has one) and test, using the same commands
+      #    as CLAUDE.md.
+      # 2. If the app has a database, run the database tests against a real one (a service
+      #    container, or the database tool's local mode), so access rules and migrations are tested.
+      # 3. Start the app for real and check it answers. Tests use fakes, so a setup that was
       #    never started can pass every test and still crash on first run. For example:
       #
       #      - name: Start the app

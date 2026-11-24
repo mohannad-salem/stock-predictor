@@ -7,7 +7,7 @@ Read this first in every session. It is the single source of truth for how work 
 - Product brief: docs/brief.md
 - Architecture: docs/architecture.md
 - Data model: docs/data-model.md
-- Decisions log: docs/decisions.md (read it before making any design choice; if your question is answered there, follow it)
+- Decisions log: docs/decisions.md (read it before making any design choice; if your question is answered there, follow it). Its "Rules in force" list is what applies; open docs/decisions-archive/ only when you need an old decision's reasoning.
 - How the workflow runs: workflow/README.md
 
 ## Stack
@@ -21,6 +21,7 @@ TODO: fill in once the stack is chosen.
 - Install: `TODO`
 - Run locally: `TODO`
 - Test: `TODO`
+- Type check (if the language has one): `TODO`
 - Lint: `TODO`
 
 ## Conventions
@@ -29,6 +30,7 @@ TODO: folder structure, naming, libraries to use or avoid.
 
 - Secrets (keys, tokens, passwords) never go in the repo, a pull request or a chat. Keep them in environment variables or a git-ignored file.
 - Every change ships with tests for its acceptance criteria.
+- If a command in this file can't run in your environment (for example the database tests need Docker), say so in the pull request instead of skipping it silently.
 - Keep pull requests small: one GitHub issue per pull request.
 
 ## Branches
